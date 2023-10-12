@@ -100,7 +100,7 @@ Other possible outputs are graphs for parameter support and clines.
     grapher_s = clinalyse.Graphs(profiler_s.profiles, [fg_c, fg_w], d, model="sigmoid")
     grapher_s.graphing_of_parameter_support()
 
-![parameter_support](.\assets\graph_for_parameter_1_sigmoid.png)
+![parameter_support](assets/graph_for_parameter_1_sigmoid.png)
 
 If we want to download a cline graph, in the first parameter we have to choose
 which locus we want to have displayed (in this case locus number 13 - Python
@@ -109,14 +109,14 @@ case from -150 to 150).
 
     grapher_s.cline_graph(14, -150, 150, 0.1)
 
-![cline](.\assets\sigmoid_cline_for_locus_L037_1393F.png "locus_graph")
+![cline](assets/sigmoid_cline_for_locus_L037_1393F.png "locus_graph")
 
 If we want to highlight a certain portion of the cline, we can use the 
 parameter "rect" in this way:
 
     grapher_s.cline_graph(92, -150, 150, 0.1, rect=[0,0,1,-25])
 
-![cline_w_rect](.\assets\cline_rect.png)
+![cline_w_rect](assets/cline_rect.png)
 
 One of the outputs of clinalyse is also an estimated support - csv containing 
 the estimated parameter values for each locus and, in addition, two and three
