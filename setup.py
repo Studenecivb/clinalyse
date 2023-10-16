@@ -8,5 +8,6 @@ setup(
    author_email='ninahaladova@gmail.com',
    packages=['clinalyse'],
    install_requires=['matplotlib', 'numpy', 'pandas', 'psutil', 'scipy'],
+   download_url='https://github.com/Studenecivb/clinalyse/archive/refs/tags/v1.0.0.tar.gz',
 )
 
