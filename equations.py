@@ -5,6 +5,8 @@ import multiprocessing
 import os
 import zipfile
 import logging
+import scipy.stats as st
+import scipy.special as ss
 
 import numpy as np
 import pandas as pd
@@ -15,13 +17,14 @@ logging.basicConfig(level=logging.INFO)
 
 
 class Profiler:
-    def __init__(self, data: np.array, list_of_fibgrids: list, model: str, path="."):
+    def __init__(self, data: np.array, list_of_fibgrids: list, model: str, path=".", shape=None):
         self.data = data
         self.list_of_fibgrids = list_of_fibgrids
         self.fm = _Fibmax(self.list_of_fibgrids)
         self.profiles = None
         self.path = path
         self.model = model
+        self.shape = shape
 
     def calculate_profiles(self, data: np.array, number_of_processes=4):
         logging.info('Profiles calculations starting.')
@@ -31,7 +34,7 @@ class Profiler:
                 _ProfilerSingleLocus.get_1d_profiles,
                 [
                     _ProfilerSingleLocus(
-                        self.data, self.list_of_fibgrids, self.model, i, self.path
+                        self.data, self.list_of_fibgrids, self.model, i, self.path, self.shape
                     )
                     for i in range(len(data.data_labelled_ready) - 1)
                     # for i in range(1)
@@ -42,7 +45,7 @@ class Profiler:
                 _ProfilerSingleLocus.get_1d_profiles,
                 [
                     _ProfilerSingleLocus(
-                        self.data, self.list_of_fibgrids, self.model, i, self.path
+                        self.data, self.list_of_fibgrids, self.model, i, self.path, self.shape
                     )
                     for i in range(len(data.test))
                 ],
@@ -83,7 +86,7 @@ class _ProfilerSingleLocus:
     safe_p_upper_bound = 0.9999999999999998
 
     def __init__(
-        self, data: np.array, list_of_fibgrids: list, model, locus_idx: int, path="."
+        self, data: np.array, list_of_fibgrids: list, model,  locus_idx: int, path=".", shape=None,
     ):
         self.geo_at_locus_i = np.concatenate(
             np.hsplit(self._grab_data(data.data_labelled_ready, locus_idx), 2)[1], axis=0
@@ -102,6 +105,15 @@ class _ProfilerSingleLocus:
         self.locus_idx = locus_idx
         self.path = path
         self.model = model
+        self.shape = shape
+        self.prep = self._preparation_gosset()
+
+    def _preparation_gosset(self):
+        if self.shape:
+            result = self._studentcdfgrad()
+            return [self.shape, result]
+        else:
+            return None
 
     @staticmethod
     def _grab_data(data: np.array, locus_idx: int):
@@ -177,6 +189,45 @@ class _ProfilerSingleLocus:
                     self.data.test[0][2]
                     * _ProfilerSingleLocus._negative_squared_distance(
                         _ProfilerSingleLocus.safe_sigmoid_cline(
+                            _ProfilerSingleLocus.safe_locate_n_scale(
+                                self.data.test[0][0], cw[0], cw[1]
+                            )
+                        ),
+                        self.data.test[0][1],
+                    )
+                )
+            return real_leastsquared_equation
+
+    # Additional model - Gossetbar and all its little
+    def _studentcdfgrad(self):
+        result = ss.gamma((self.shape + 1)/2)/(math.sqrt(math.pi * self.shape) * ss.gamma(self.shape / 2))
+        return result
+
+    def gossetbar_cline(self, x):
+        result = st.t.cdf(x, self.prep[0], scale=self.prep[1])
+        return result
+
+    def _gossetbar_cline_equations(self):
+        if self.data.test is None:
+            def real_likelihood_equation(cw):
+                return sum(
+                    _ProfilerSingleLocus._efficient_bin_log_likelihood(
+                        self.gossetbar_cline(
+                            _ProfilerSingleLocus.safe_locate_n_scale(
+                                self.geo_at_locus_i, cw[0], cw[1]
+                            )
+                        ),
+                        self.ploidy_at_i,
+                        self.geno_at_locus_i,
+                    )
+                )
+            return real_likelihood_equation
+        else:
+            def real_leastsquared_equation(cw):
+                return sum(
+                    self.data.test[0][2]
+                    * _ProfilerSingleLocus._negative_squared_distance(
+                        self.gossetbar_cline(
                             _ProfilerSingleLocus.safe_locate_n_scale(
                                 self.data.test[0][0], cw[0], cw[1]
                             )
@@ -433,6 +484,42 @@ class _ProfilerSingleLocus:
                 os.remove(
                     f"{self.path}/sigmoid_C_evals/sig_C_evals_{self.locus_idx+1}.csv"
                 )
+            if self.model == "gossetbar":
+                if not os.path.isdir(f"{self.path}/gossetbar_C_evals"):
+                    os.mkdir(f"{self.path}/gossetbar_C_evals")
+                f = open(
+                    f"{self.path}/gossetbar_C_evals/gos_C_evals_{self.locus_idx+1}.csv",
+                    "w",
+                )
+                with f:
+                    header = ["c-fibgridpos", "w-fibgridpos", f"values"]
+                    writer = csv.DictWriter(f, fieldnames=header, lineterminator='\n')
+                    writer.writeheader()
+                    for a in range(n_axes):
+                        for v_i in range(len(self.list_of_fibgrids[a].grid)):
+                            evals_i, best = self.fm.fibmax(
+                                function_to_max(self), fix_axis=(a, v_i)
+                            )
+                            evals.append(evals_i)
+                            for x in evals_i:
+                                writer.writerow(
+                                    {
+                                        "c-fibgridpos": x[0][0],
+                                        "w-fibgridpos": x[0][1],
+                                        "values": x[1],
+                                    }
+                                )
+                f.close()
+                with zipfile.ZipFile(
+                    f"{self.path}/gossetbar_C_evals/gos_C_evals_{self.locus_idx+1}.zip",
+                    "w",
+                ) as f:
+                    f.write(
+                        f"{self.path}/gossetbar_C_evals/gos_C_evals_{self.locus_idx+1}.csv"
+                    )
+                os.remove(
+                    f"{self.path}/gossetbar_C_evals/gos_C_evals_{self.locus_idx+1}.csv"
+                )
             if self.model == "barrier":
                 if not os.path.isdir(f"{self.path}/barrier_C_evals"):
                     os.mkdir(f"{self.path}/barrier_C_evals")
@@ -583,6 +670,8 @@ class _ProfilerSingleLocus:
         function_to_max = None
         if self.model == "sigmoid":
             function_to_max = _ProfilerSingleLocus._sigmoid_cline_equations
+        if self.model == "gossetbar":
+            function_to_max = _ProfilerSingleLocus._gossetbar_cline_equations
         if self.model == "barrier":
             function_to_max = _ProfilerSingleLocus._barrier_cline_equations
         if self.model == "asymmetric":

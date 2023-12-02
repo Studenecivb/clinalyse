@@ -118,6 +118,54 @@ class Graphs:
             return [y_value_range, y_value_range_min_sig, y_value_range_max_sig]
 
     @staticmethod
+    def gossetbar_cline_y_values(x_value_range, mles, intervals):
+        y_value_range = _ProfilerSingleLocus.gossetbar_cline(
+            (x_value_range - mles[0]) / mles[1]
+        )
+        try:
+            y_value_range_min_sig = np.minimum(
+                np.minimum(
+                    _ProfilerSingleLocus.gossetbar_cline(
+                        (x_value_range - intervals[0][0]) / intervals[1][0]
+                    ),
+                    _ProfilerSingleLocus.gossetbar_cline(
+                        (x_value_range - intervals[0][0]) / intervals[1][-1]
+                    ),
+                ),
+                np.minimum(
+                    _ProfilerSingleLocus.gossetbar_cline(
+                        (x_value_range - intervals[0][-1]) / intervals[1][0]
+                    ),
+                    _ProfilerSingleLocus.gossetbar_cline(
+                        (x_value_range - intervals[0][-1]) / intervals[1][-1]
+                    ),
+                ),
+            )
+            y_value_range_max_sig = np.maximum(
+                np.maximum(
+                    _ProfilerSingleLocus.gossetbar_cline(
+                        (x_value_range - intervals[0][0]) / intervals[1][0]
+                    ),
+                    _ProfilerSingleLocus.gossetbar_cline(
+                        (x_value_range - intervals[0][0]) / intervals[1][-1]
+                    ),
+                ),
+                np.maximum(
+                    _ProfilerSingleLocus.gossetbar_cline(
+                        (x_value_range - intervals[0][-1]) / intervals[1][0]
+                    ),
+                    _ProfilerSingleLocus.gossetbar_cline(
+                        (x_value_range - intervals[0][-1]) / intervals[1][-1]
+                    ),
+                ),
+            )
+            return [y_value_range, y_value_range_min_sig, y_value_range_max_sig]
+        except IndexError:
+            y_value_range_min_sig = y_value_range * np.nan
+            y_value_range_max_sig = y_value_range * np.nan
+            return [y_value_range, y_value_range_min_sig, y_value_range_max_sig]
+
+    @staticmethod
     def bar_cline_y_values(x_value_range, mles, intervals):
         product_create = product(range(2), repeat=4)
         y_value_range_bar = _ProfilerSingleLocus.folded_barrier_cline(
@@ -247,6 +295,8 @@ class Graphs:
 
         if self.model == "sigmoid":
             y_values = Graphs.sig_cline_y_values(x_value_range, mles, intervals)
+        elif self.model == "gossetbar":
+            y_values = Graphs.gossetbar_cline_y_values(x_value_range, mles, intervals)
         elif self.model == "barrier":
             y_values = Graphs.bar_cline_y_values(x_value_range, mles, intervals)
         elif self.model == "asymmetric":
@@ -315,6 +365,7 @@ class Support:
         self.profiles = profiles
         self.data = data
         self.support_for_all_sigmoid = None
+        self.support_for_all_gossetbar = None
         self.support_for_all_barrier = None
         self.support_for_all_asymmetric = None
         self.support_for_all_asymmetric_barrier = None
@@ -349,6 +400,7 @@ class Support:
     def estimate_support(self):
         logging.info('Estimating parameter support.')
         support_for_all_sigmoid = []
+        support_for_all_gossetbar = []
         support_for_all_barrier = []
         support_for_all_asymmetric = []
         support_for_all_asymmetric_barrier = []
@@ -381,6 +433,8 @@ class Support:
             # csv for a parameter
             if self.model == "sigmoid":
                 support_for_all_sigmoid.append(support_for_i)
+            if self.model == "gossetbar":
+                support_for_all_gossetbar.append(support_for_i)
             if self.model == "barrier":
                 support_for_all_barrier.append(support_for_i)
             if self.model == "asymmetric":
@@ -402,6 +456,7 @@ class Support:
                     index=False,
                 )
         self.support_for_all_sigmoid = support_for_all_sigmoid
+        self.support_for_all_gossetbar = support_for_all_gossetbar
         self.support_for_all_barrier = support_for_all_barrier
         self.support_for_all_asymmetric_barrier = support_for_all_asymmetric_barrier
         self.support_for_all_asymmetric = support_for_all_asymmetric
