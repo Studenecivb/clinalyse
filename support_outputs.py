@@ -19,10 +19,11 @@ logging.basicConfig(level=logging.INFO)
 
 class Graphs:
     def __init__(
-        self, profiles: np.array, list_of_fibgrids: list, data: np.array, model: str
+        self, profiler, profiles: np.array, list_of_fibgrids: list, data: np.array, model: str,
     ):
         self.list_of_fibgrids = list_of_fibgrids
         self.data = data
+        self.profiler = profiler
         self.profiles = profiles
         self.model = model
 
@@ -117,44 +118,43 @@ class Graphs:
             y_value_range_max_sig = y_value_range * np.nan
             return [y_value_range, y_value_range_min_sig, y_value_range_max_sig]
 
-    @staticmethod
-    def gossetbar_cline_y_values(x_value_range, mles, intervals):
-        y_value_range = _ProfilerSingleLocus.gossetbar_cline(
+    def gossetbar_cline_y_values(self, x_value_range, mles, intervals):
+        y_value_range = self.profiler.gossetbar_cline(
             (x_value_range - mles[0]) / mles[1]
         )
         try:
             y_value_range_min_sig = np.minimum(
                 np.minimum(
-                    _ProfilerSingleLocus.gossetbar_cline(
+                    self.profiler.gossetbar_cline(
                         (x_value_range - intervals[0][0]) / intervals[1][0]
                     ),
-                    _ProfilerSingleLocus.gossetbar_cline(
+                    self.profiler.gossetbar_cline(
                         (x_value_range - intervals[0][0]) / intervals[1][-1]
                     ),
                 ),
                 np.minimum(
-                    _ProfilerSingleLocus.gossetbar_cline(
+                    self.profiler.gossetbar_cline(
                         (x_value_range - intervals[0][-1]) / intervals[1][0]
                     ),
-                    _ProfilerSingleLocus.gossetbar_cline(
+                    self.profiler.gossetbar_cline(
                         (x_value_range - intervals[0][-1]) / intervals[1][-1]
                     ),
                 ),
             )
             y_value_range_max_sig = np.maximum(
                 np.maximum(
-                    _ProfilerSingleLocus.gossetbar_cline(
+                    self.profiler.gossetbar_cline(
                         (x_value_range - intervals[0][0]) / intervals[1][0]
                     ),
-                    _ProfilerSingleLocus.gossetbar_cline(
+                    self.profiler.gossetbar_cline(
                         (x_value_range - intervals[0][0]) / intervals[1][-1]
                     ),
                 ),
                 np.maximum(
-                    _ProfilerSingleLocus.gossetbar_cline(
+                    self.profiler.gossetbar_cline(
                         (x_value_range - intervals[0][-1]) / intervals[1][0]
                     ),
-                    _ProfilerSingleLocus.gossetbar_cline(
+                    self.profiler.gossetbar_cline(
                         (x_value_range - intervals[0][-1]) / intervals[1][-1]
                     ),
                 ),
@@ -296,7 +296,7 @@ class Graphs:
         if self.model == "sigmoid":
             y_values = Graphs.sig_cline_y_values(x_value_range, mles, intervals)
         elif self.model == "gossetbar":
-            y_values = Graphs.gossetbar_cline_y_values(x_value_range, mles, intervals)
+            y_values = self.gossetbar_cline_y_values(x_value_range, mles, intervals)
         elif self.model == "barrier":
             y_values = Graphs.bar_cline_y_values(x_value_range, mles, intervals)
         elif self.model == "asymmetric":
