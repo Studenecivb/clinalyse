@@ -119,51 +119,33 @@ class Graphs:
             return [y_value_range, y_value_range_min_sig, y_value_range_max_sig]
 
     def gossetbar_cline_y_values(self, x_value_range, mles, intervals):
-        y_value_range = self.profiler.gossetbar_cline(
-            (x_value_range - mles[0]) / mles[1]
+        product_create = product(range(2), repeat=4)
+        y_value_range_gos = self.profiler.gossetbar_cline(
+            ((x_value_range - mles[0]) / mles[1]), mles[2], mles[3]
         )
-        try:
-            y_value_range_min_sig = np.minimum(
-                np.minimum(
+        y_value_range_min_gos = inf
+        y_value_range_max_gos = -inf
+        for i in list(product_create):
+            i = [x * (-1) for x in i]
+            try:
+                y_value_range_min_gos = np.minimum(
                     self.profiler.gossetbar_cline(
-                        (x_value_range - intervals[0][0]) / intervals[1][0]
+                        ((x_value_range - intervals[0][i[0]]) / intervals[1][i[1]]),
+                        intervals[2][i[2]],
                     ),
+                    y_value_range_min_gos,
+                )
+                y_value_range_max_gos = np.maximum(
                     self.profiler.gossetbar_cline(
-                        (x_value_range - intervals[0][0]) / intervals[1][-1]
+                        (x_value_range - intervals[0][i[0]]) / intervals[1][i[1]],
+                        intervals[2][i[2]],
                     ),
-                ),
-                np.minimum(
-                    self.profiler.gossetbar_cline(
-                        (x_value_range - intervals[0][-1]) / intervals[1][0]
-                    ),
-                    self.profiler.gossetbar_cline(
-                        (x_value_range - intervals[0][-1]) / intervals[1][-1]
-                    ),
-                ),
-            )
-            y_value_range_max_sig = np.maximum(
-                np.maximum(
-                    self.profiler.gossetbar_cline(
-                        (x_value_range - intervals[0][0]) / intervals[1][0]
-                    ),
-                    self.profiler.gossetbar_cline(
-                        (x_value_range - intervals[0][0]) / intervals[1][-1]
-                    ),
-                ),
-                np.maximum(
-                    self.profiler.gossetbar_cline(
-                        (x_value_range - intervals[0][-1]) / intervals[1][0]
-                    ),
-                    self.profiler.gossetbar_cline(
-                        (x_value_range - intervals[0][-1]) / intervals[1][-1]
-                    ),
-                ),
-            )
-            return [y_value_range, y_value_range_min_sig, y_value_range_max_sig]
-        except IndexError:
-            y_value_range_min_sig = y_value_range * np.nan
-            y_value_range_max_sig = y_value_range * np.nan
-            return [y_value_range, y_value_range_min_sig, y_value_range_max_sig]
+                    y_value_range_max_gos,
+                )
+            except IndexError:
+                y_value_range_min_gos = y_value_range_gos * np.nan
+                y_value_range_max_gos = y_value_range_gos * np.nan
+        return [y_value_range_gos, y_value_range_min_gos, y_value_range_max_gos]
 
     @staticmethod
     def bar_cline_y_values(x_value_range, mles, intervals):
