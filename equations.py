@@ -106,9 +106,14 @@ class _ProfilerSingleLocus:
         self.model = model
 
         if self.model == "gossetbar":
-            preparator_g = PreparationGosset(self.list_of_fibgrids[2].grid)
+            preparator_g = PreparationGosset(fibgrid_shape=self.list_of_fibgrids[2].grid)
             preparator_g.preparation_gosset()
-            self.prep = preparator_g.map_shape_hack
+            self.prep = preparator_g.map_shape_hack_shape
+
+        if self.model == 'gossetbar_asy':
+            preparator_g = PreparationGosset(fibgrid_shape=self.list_of_fibgrids[2].grid, fibgrid_asy=self.list_of_fibgrids[3].grid)
+            preparator_g.preparation_gosset_asy()
+            self.prep = preparator_g.map_shape_hack_asy
 
     @staticmethod
     def _grab_data(data: np.array, locus_idx: int):
@@ -222,6 +227,41 @@ class _ProfilerSingleLocus:
                             _ProfilerSingleLocus.safe_locate_n_scale(
                                 self.data.test[0][0], cw[0], cw[1]
                             ), cw[2]
+                        ),
+                        self.data.test[0][1],
+                    )
+                )
+            return real_leastsquared_equation
+
+    # Another Gosset model
+    def gossetbar_cline_asy(self, x, shape, asymmetry):
+        result = st.nct.cdf(x, shape, nc=asymmetry, scale=1/self.prep[(shape, asymmetry)][0], loc=-self.prep[(shape, asymmetry)][1]/self.prep[(shape, asymmetry)][0])
+        return result
+
+    def _gossetbar_asy_cline_equations(self):
+        if self.data.test is None:
+            def real_likelihood_equation(cw):
+                return sum(
+                    _ProfilerSingleLocus._efficient_bin_log_likelihood(
+                        self.gossetbar_cline_asy(
+                            _ProfilerSingleLocus.safe_locate_n_scale(
+                                self.geo_at_locus_i, cw[0], cw[1]
+                            ), cw[2], cw[3]
+                        ),
+                        self.ploidy_at_i,
+                        self.geno_at_locus_i,
+                    )
+                )
+            return real_likelihood_equation
+        else:
+            def real_leastsquared_equation(cw):
+                return sum(
+                    self.data.test[0][2]
+                    * _ProfilerSingleLocus._negative_squared_distance(
+                        self.gossetbar_cline_asy(
+                            _ProfilerSingleLocus.safe_locate_n_scale(
+                                self.data.test[0][0], cw[0], cw[1]
+                            ), cw[2], cw[3]
                         ),
                         self.data.test[0][1],
                     )
@@ -513,6 +553,44 @@ class _ProfilerSingleLocus:
                 os.remove(
                     f"{self.path}/gossetbar_C_evals/gos_C_evals_{self.locus_idx+1}.csv"
                 )
+            if self.model == "gossetbar_asy":
+                if not os.path.isdir(f"{self.path}/gossetbar_asy_C_evals"):
+                    os.mkdir(f"{self.path}/gossetbar_asy_C_evals")
+                f = open(
+                    f"{self.path}/gossetbar_asy_C_evals/gos_C_evals_{self.locus_idx+1}.csv",
+                    "w",
+                )
+                with f:
+                    header = ["c-fibgridpos", "w-fibgridpos", "shape-fibgirdpos", "asymmetry-fibgridpos", f"values"]
+                    writer = csv.DictWriter(f, fieldnames=header, lineterminator='\n')
+                    writer.writeheader()
+                    for a in range(n_axes):
+                        for v_i in range(len(self.list_of_fibgrids[a].grid)):
+                            evals_i, best = self.fm.fibmax(
+                                function_to_max(self), fix_axis=(a, v_i)
+                            )
+                            evals.append(evals_i)
+                            for x in evals_i:
+                                writer.writerow(
+                                    {
+                                        "c-fibgridpos": x[0][0],
+                                        "w-fibgridpos": x[0][1],
+                                        "shape-fibgirdpos": x[0][2],
+                                        "asymmetry-fibgridpos": x[0][3],
+                                        "values": x[1],
+                                    }
+                                )
+                f.close()
+                with zipfile.ZipFile(
+                    f"{self.path}/gossetbar_asy_C_evals/gos_C_evals_{self.locus_idx+1}.zip",
+                    "w",
+                ) as f:
+                    f.write(
+                        f"{self.path}/gossetbar_asy_C_evals/gos_C_evals_{self.locus_idx+1}.csv"
+                    )
+                os.remove(
+                    f"{self.path}/gossetbar_asy_C_evals/gos_C_evals_{self.locus_idx+1}.csv"
+                )
             if self.model == "barrier":
                 if not os.path.isdir(f"{self.path}/barrier_C_evals"):
                     os.mkdir(f"{self.path}/barrier_C_evals")
@@ -665,6 +743,8 @@ class _ProfilerSingleLocus:
             function_to_max = _ProfilerSingleLocus._sigmoid_cline_equations
         if self.model == "gossetbar":
             function_to_max = _ProfilerSingleLocus._gossetbar_cline_equations
+        if self.model == "gossetbar_asy":
+            function_to_max = _ProfilerSingleLocus._gossetbar_asy_cline_equations
         if self.model == "barrier":
             function_to_max = _ProfilerSingleLocus._barrier_cline_equations
         if self.model == "asymmetric":
@@ -696,19 +776,40 @@ class _ProfilerSingleLocus:
 
 
 class PreparationGosset:
-    def __init__(self, fibgrid):
-        self.fibgrid = fibgrid
-        self.fibgrid_res = []
-        self.prep = None
-        self.map_shape_hack = {}
+    def __init__(self, fibgrid_shape, fibgrid_asy=None):
+        self.fibgrid_shape = fibgrid_shape
+        self.fibgrid_asy = fibgrid_asy
+        self.fibgrid_shape_res = []
+        self.prep_shape = None
+        self.map_shape_hack_shape = {}
+        self.prep_asy = None
+        self.map_shape_hack_asy = {}
 
     def preparation_gosset(self):
-        for i in self.fibgrid:
+        for i in self.fibgrid_shape:
             result = self._studentcdfgrad(i)
-            self.fibgrid_res.append(result)
-            self.map_shape_hack[i] = result
-        self.prep = [self.fibgrid, self.fibgrid_res]
+            self.fibgrid_shape_res.append(result)
+            self.map_shape_hack_shape[i] = result
+        self.prep_shape = [self.fibgrid_shape, self.fibgrid_shape_res]
         return
+
+    def preparation_gosset_asy(self):
+        for z in self.fibgrid_shape:
+            for y in self.fibgrid_asy:
+                g = [ss.gamma((i+z)/2) for i in range(4)]
+                gsq = [g[i] ** 2 for i in range(4)]
+                asq = y ** 2
+                offset = y * math.sqrt(z / 2) * g[2] / g[3]
+                nc_student_cdf_gradient_numer = 2 ** -z * math.exp(asq / 2) * math.pi * z ** -(1 + z / 2) * (z + (asq * z * gsq[2]) / (2 * gsq[3])) ** ((1 + z) / 2)
+                nc_student_cdf_gradient_demon = g[1] * PreparationGosset.hermite(-1-z, -asq * g[2]/math.sqrt(2 * asq * gsq[2] + 4 * gsq[3]))
+                result = nc_student_cdf_gradient_numer/nc_student_cdf_gradient_demon
+                self.map_shape_hack_asy[(z, y)] = [result, offset]
+        return
+
+    @staticmethod
+    def hermite(v, z):
+        result = 2 ** v * math.sqrt(math.pi) * (1 / ss.gamma((1 - v) / 2) * ss.hyp1f1(-v / 2, 1 / 2, z ** 2) - 2 * z / ss.gamma(-v / 2) * ss.hyp1f1((1 - v) / 2, 3 / 2, z ** 2))
+        return result
 
     @staticmethod
     def _studentcdfgrad(x):
