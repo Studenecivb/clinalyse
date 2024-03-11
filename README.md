@@ -14,7 +14,7 @@ To start, installation through pip command is required:
 > pip install clinalyse
 
 Access to GitHub:
-**GitHUB LINK**
+https://github.com/Studenecivb/clinalyse
 
 Whether the user chooses to create their own script in Python or run the cli, 
 it will be necessary to start by cleaning the input data. 
