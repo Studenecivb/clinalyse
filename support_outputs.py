@@ -19,10 +19,11 @@ logging.basicConfig(level=logging.INFO)
 
 class Graphs:
     def __init__(
-        self, profiles: np.array, list_of_fibgrids: list, data: np.array, model: str
+        self, profiler, profiles: np.array, list_of_fibgrids: list, data: np.array, model: str,
     ):
         self.list_of_fibgrids = list_of_fibgrids
         self.data = data
+        self.profiler = profiler
         self.profiles = profiles
         self.model = model
 
@@ -117,6 +118,66 @@ class Graphs:
             y_value_range_max_sig = y_value_range * np.nan
             return [y_value_range, y_value_range_min_sig, y_value_range_max_sig]
 
+    def gossetbar_cline_y_values(self, x_value_range, mles, intervals):
+        product_create = product(range(2), repeat=4)
+        y_value_range_gos = self.profiler.gossetbar_cline(
+            ((x_value_range - mles[0]) / mles[1]), mles[2]
+        )
+        y_value_range_min_gos = inf
+        y_value_range_max_gos = -inf
+        for i in list(product_create):
+            i = [x * (-1) for x in i]
+            try:
+                y_value_range_min_gos = np.minimum(
+                    self.profiler.gossetbar_cline(
+                        ((x_value_range - intervals[0][i[0]]) / intervals[1][i[1]]),
+                        intervals[2][i[2]],
+                    ),
+                    y_value_range_min_gos,
+                )
+                y_value_range_max_gos = np.maximum(
+                    self.profiler.gossetbar_cline(
+                        (x_value_range - intervals[0][i[0]]) / intervals[1][i[1]],
+                        intervals[2][i[2]],
+                    ),
+                    y_value_range_max_gos,
+                )
+            except IndexError:
+                y_value_range_min_gos = y_value_range_gos * np.nan
+                y_value_range_max_gos = y_value_range_gos * np.nan
+        return [y_value_range_gos, y_value_range_min_gos, y_value_range_max_gos]
+
+    def gossetbar_asy_cline_y_values(self, x_value_range, mles, intervals):
+        product_create = product(range(2), repeat=4)
+        y_value_range_gos_asy = self.profiler.gossetbar_cline_asy(
+            ((x_value_range - mles[0]) / mles[1]), mles[2], mles[3]
+        )
+        y_value_range_min_gos_asy = inf
+        y_value_range_max_gos_asy = -inf
+        for i in list(product_create):
+            i = [x * (-1) for x in i]
+            try:
+                y_value_range_min_gos_asy = np.minimum(
+                    self.profiler.gossetbar_cline_asy(
+                        ((x_value_range - intervals[0][i[0]]) / intervals[1][i[1]]),
+                        intervals[2][i[2]],
+                        intervals[3][i[3]],
+                    ),
+                    y_value_range_min_gos_asy,
+                )
+                y_value_range_max_gos_asy = np.maximum(
+                    self.profiler.gossetbar_cline_asy(
+                        (x_value_range - intervals[0][i[0]]) / intervals[1][i[1]],
+                        intervals[2][i[2]],
+                        intervals[3][i[3]],
+                    ),
+                    y_value_range_max_gos_asy,
+                )
+            except IndexError:
+                y_value_range_min_gos_asy = y_value_range_gos_asy * np.nan
+                y_value_range_max_gos_asy = y_value_range_gos_asy * np.nan
+        return [y_value_range_gos_asy, y_value_range_min_gos_asy, y_value_range_max_gos_asy]
+
     @staticmethod
     def bar_cline_y_values(x_value_range, mles, intervals):
         product_create = product(range(2), repeat=4)
@@ -128,6 +189,8 @@ class Graphs:
         for i in list(product_create):
             i = [x * (-1) for x in i]
             try:
+                if intervals[1][i[1]] == 0:
+                    intervals[1][i[1]] = 0.000000001
                 y_value_range_min_bar = np.minimum(
                     _ProfilerSingleLocus.folded_barrier_cline(
                         ((x_value_range - intervals[0][i[0]]) / intervals[1][i[1]]),
@@ -215,6 +278,42 @@ class Graphs:
                 y_value_range_max_bar = y_value_range_bar * np.nan
         return [y_value_range_bar, y_value_range_min_bar, y_value_range_max_bar]
 
+    @staticmethod
+    def unit_hl_cline_y_values(x_value_range, mles, intervals):
+        product_thingy = product(range(2), repeat=5)
+        y_value_range_bar = _ProfilerSingleLocus.unit_h_l_cline(
+            ((x_value_range - mles[0]) / mles[1]), mles[2], mles[3], mles[4], mles[5]
+        )
+        y_value_range_min_bar = inf
+        y_value_range_max_bar = -inf
+        for i in list(product_thingy):
+            i = [x * (-1) for x in i]
+            try:
+                y_value_range_min_bar = np.minimum(
+                    _ProfilerSingleLocus.unit_h_l_cline(
+                        ((x_value_range - intervals[0][i[0]]) / intervals[1][i[1]]),
+                        intervals[2][i[2]],
+                        intervals[3][i[3]],
+                        intervals[4][i[4]],
+                        intervals[5][i[5]]
+                    ),
+                    y_value_range_min_bar,
+                )
+                y_value_range_max_bar = np.maximum(
+                    _ProfilerSingleLocus.unit_h_l_cline(
+                        (x_value_range - intervals[0][i[0]]) / intervals[1][i[1]],
+                        intervals[2][i[2]],
+                        intervals[3][i[3]],
+                        intervals[4][i[4]],
+                        intervals[5][i[5]]
+                    ),
+                    y_value_range_max_bar,
+                )
+            except IndexError:
+                y_value_range_min_bar = y_value_range_bar * np.nan
+                y_value_range_max_bar = y_value_range_bar * np.nan
+        return [y_value_range_bar, y_value_range_min_bar, y_value_range_max_bar]
+
     def cline_graph(
         self,
         locus_number: int,
@@ -244,12 +343,19 @@ class Graphs:
                 Support.llus_intervals(support_for_par_i_prof_i, -2)
             ]
             intervals.append(interval_of_llus_2)
-
+        mles = np.concatenate(mles, axis=0)
+        mles = np.select([mles == 0], [0.0000000000001], mles)
         if self.model == "sigmoid":
             y_values = Graphs.sig_cline_y_values(x_value_range, mles, intervals)
+        elif self.model == "gossetbar":
+            y_values = self.gossetbar_cline_y_values(x_value_range, mles, intervals)
+        elif self.model == "gossetbar_asy":
+            y_values = self.gossetbar_asy_cline_y_values(x_value_range, mles, intervals)
         elif self.model == "barrier":
             y_values = Graphs.bar_cline_y_values(x_value_range, mles, intervals)
         elif self.model == "asymmetric":
+            y_values = Graphs.asy_cline_y_values(x_value_range, mles, intervals)
+        elif self.model == "unit_hl":
             y_values = Graphs.asy_cline_y_values(x_value_range, mles, intervals)
         else:
             y_values = Graphs.asy_bar_cline_y_values(x_value_range, mles, intervals)
@@ -315,9 +421,12 @@ class Support:
         self.profiles = profiles
         self.data = data
         self.support_for_all_sigmoid = None
+        self.support_for_all_gossetbar = None
+        self.support_for_all_gossetbar_asy = None
         self.support_for_all_barrier = None
         self.support_for_all_asymmetric = None
         self.support_for_all_asymmetric_barrier = None
+        self.support_for_all_unit_hl = None
         self.path = path
         self.model = model
 
@@ -349,9 +458,12 @@ class Support:
     def estimate_support(self):
         logging.info('Estimating parameter support.')
         support_for_all_sigmoid = []
+        support_for_all_gossetbar = []
+        support_for_all_gossetbar_asy = []
         support_for_all_barrier = []
         support_for_all_asymmetric = []
         support_for_all_asymmetric_barrier = []
+        support_for_all_unit_hl = []
         if self.path:
             if not os.path.isdir(f"{self.path}/estimated_support"):
                 os.mkdir(f"{self.path}/estimated_support")
@@ -381,12 +493,18 @@ class Support:
             # csv for a parameter
             if self.model == "sigmoid":
                 support_for_all_sigmoid.append(support_for_i)
+            if self.model == "gossetbar":
+                support_for_all_gossetbar.append(support_for_i)
+            if self.model == "gossetbar_asy":
+                support_for_all_gossetbar_asy.append(support_for_i)
             if self.model == "barrier":
                 support_for_all_barrier.append(support_for_i)
             if self.model == "asymmetric":
                 support_for_all_asymmetric.append(support_for_i)
             if self.model == "asymmetric_barrier":
                 support_for_all_asymmetric_barrier.append(support_for_i)
+            if self.model == 'unit_hl':
+                support_for_all_unit_hl.append(support_for_i)
             list_of_i = {
                 "Locus": self.data.names_of_loci,
                 "Parameter": (i + 1),
@@ -402,9 +520,12 @@ class Support:
                     index=False,
                 )
         self.support_for_all_sigmoid = support_for_all_sigmoid
+        self.support_for_all_gossetbar = support_for_all_gossetbar
+        self.support_for_all_gossetbar_asy = support_for_all_gossetbar_asy
         self.support_for_all_barrier = support_for_all_barrier
         self.support_for_all_asymmetric_barrier = support_for_all_asymmetric_barrier
         self.support_for_all_asymmetric = support_for_all_asymmetric
+        self.support_for_all_unit_hl = support_for_all_unit_hl
 
 
 class Hypotheses:
