@@ -2,6 +2,7 @@ from cmath import inf
 import logging
 
 import numpy as np
+from decimal import Decimal
 
 logging.basicConfig(level=logging.INFO)
 
@@ -39,7 +40,18 @@ class FibGrid:
         return np.round(((1 + 5**0.5) / 2) ** n / (5**0.5)).astype(int)
 
     def create_grid(self):
-        self.grid = np.arange(self.start, self.end, self.grain)
+        if self.start < 0 < self.end:
+            if Decimal(f'{self.end}') % Decimal(f'{self.grain}') == 0:
+                left_interval = np.arange(self.start, 0, self.grain)
+                right_interval = np.arange(0, self.end, self.grain)
+                self.grid = np.concatenate((left_interval, right_interval))
+            else:
+                left_interval = np.arange(self.start, 0, self.grain)
+                right_interval = np.arange(left_interval[-1]+self.grain, self.end, self.grain)
+                self.grid = np.concatenate((left_interval, right_interval))
+        else:
+            self.grid = np.arange(self.start, self.end, self.grain)
+
 
     def create_fib(self):
         i = 2

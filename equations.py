@@ -5,6 +5,7 @@ import multiprocessing
 import os
 import zipfile
 import logging
+import timeit
 
 import scipy.special
 import scipy.stats as st
@@ -86,6 +87,7 @@ class _ProfilerSingleLocus:
     safe_p_lower_bound = 2.319522830243569e-16
     safe_p_upper_bound = 0.9999999999999998
 
+
     def __init__(
         self, data: np.array, list_of_fibgrids: list, model,  locus_idx: int, names_of_loci, path="."
     ):
@@ -115,6 +117,11 @@ class _ProfilerSingleLocus:
 
         if self.model == 'gossetbar_asy':
             preparator_g = PreparationGosset(fibgrid_shape=self.list_of_fibgrids[2].grid, fibgrid_asy=self.list_of_fibgrids[3].grid)
+            preparator_g.preparation_gosset_asy()
+            self.prep = preparator_g.map_shape_hack_asy
+
+        if self.model == 'unit_hl':
+            preparator_g = PreparationGosset(fibgrid_shape=self.list_of_fibgrids[5].grid, fibgrid_asy=self.list_of_fibgrids[2].grid)
             preparator_g.preparation_gosset_asy()
             self.prep = preparator_g.map_shape_hack_asy
 
@@ -154,16 +161,25 @@ class _ProfilerSingleLocus:
     def _efficient_bin_log_likelihood(
         p_hypothesis: np.ndarray, give_n_trials: np.ndarray, given_n_success: np.ndarray
     ):
-        # given_n_trials_array = np.full(p_hypothesis.shape, give_n_trials)
         result = (give_n_trials - given_n_success) * np.log(
             (np.ones(p_hypothesis.shape) - p_hypothesis)
         ) + given_n_success * np.log(p_hypothesis)
         return result
 
+    # @staticmethod
+    # def _efficient_bin_log_likelihood(
+    #         p_hypothesis: np.ndarray, give_n_trials: np.ndarray, given_n_success: np.ndarray
+    # ):
+    #     result = (give_n_trials - given_n_success) * np.log(
+    #         (np.maximum((np.ones(p_hypothesis.shape) - p_hypothesis), 0.000000000001))
+    #     ) + given_n_success * np.log(np.maximum(p_hypothesis, 0.000000000001))
+    #     return result
+
     @staticmethod
     def _negative_squared_distance(p_hypothesis: np.ndarray, p_observed: np.ndarray):
         result = -np.power(p_hypothesis - p_observed, 2)
         return result
+
 
     # First model - sigmoid
     @staticmethod
@@ -236,19 +252,57 @@ class _ProfilerSingleLocus:
                 )
             return real_leastsquared_equation
 
-    # Another Gosset model
-    def gossetbar_cline_asy(self, x, shape, asymmetry):
-        result = NonCentralStudent.nctas243(x, shape, asymmetry, 1/self.prep[(shape, asymmetry)][0], -self.prep[(shape, asymmetry)][1]/self.prep[(shape, asymmetry)][0])
-        # result = st.nct.cdf(x, shape, nc=asymmetry, scale=1/self.prep[(shape, asymmetry)][0], loc=-self.prep[(shape, asymmetry)][1]/self.prep[(shape, asymmetry)][0])
-        result = np.asarray(result, dtype=np.float64)
+    # MOST COMPLEX MODEL - UNIT HL cline
+    # U{l, h}(x) = UN(X + h(UT(X / l) − UT(0)))
+    # X = x(l/(h + l))
+
+    def unit_h_l_cline(self, x, asymmetry, height, length, shape):
+        big_x = x * (length / (height + length))
+        result = self.safe_sigmoid_cline(big_x + height * self.gossetbar_cline_asy(big_x, shape, asymmetry) - self.gossetbar_cline_asy(0, shape, asymmetry))
         return result
 
-    @staticmethod
-    def gossetbar_cline_asy_preppy(x, shape, asymmetry, prep1, prep2):
-        result = NonCentralStudent.nctas243(x, shape, asymmetry, 1/prep1, -prep2/prep1)
-        # result = st.nct.cdf(x, shape, nc=asymmetry, scale=1/self.prep[(shape, asymmetry)][0], loc=-self.prep[(shape, asymmetry)][1]/self.prep[(shape, asymmetry)][0])
-        result = np.asarray(result, dtype=np.float64)
+    def unit_hl_cline_equations(self):
+        if self.data.test is None:
+            def real_likelihood_equation(cw):
+                return sum(
+                    _ProfilerSingleLocus._efficient_bin_log_likelihood(
+                        self.unit_h_l_cline(
+                            _ProfilerSingleLocus.safe_locate_n_scale(
+                                self.geo_at_locus_i, cw[0], cw[1]
+                            ), cw[2], cw[3], cw[4], cw[5]
+                        ),
+                        self.ploidy_at_i,
+                        self.geno_at_locus_i,
+                    )
+                )
+            return real_likelihood_equation
+        else:
+            def real_leastsquared_equation(cw):
+                return sum(
+                    self.data.test[0][2]
+                    * _ProfilerSingleLocus._negative_squared_distance(
+                        self.unit_h_l_cline(
+                            _ProfilerSingleLocus.safe_locate_n_scale(
+                                self.data.test[0][0], cw[0], cw[1]
+                            ), cw[2], cw[3], cw[4], cw[5]
+                        ),
+                        self.data.test[0][1],
+                    )
+                )
+            return real_leastsquared_equation
+
+    # Another Gosset model
+
+    def gossetbar_cline_asy(self, x, shape, asymmetry):
+        result = NonCentralStudent.nctas243(x, shape, asymmetry, 1/self.prep[(shape, asymmetry)][0], -self.prep[(shape, asymmetry)][1]/self.prep[(shape, asymmetry)][0])
         return result
+
+    # @staticmethod
+    # def gossetbar_cline_asy_preppy(x, shape, asymmetry, prep1, prep2):
+    #     result = NonCentralStudent.nctas243(x, shape, asymmetry, 1/prep1, -prep2/prep1)
+    #     # result = st.nct.cdf(x, shape, nc=asymmetry, scale=1/self.prep[(shape, asymmetry)][0], loc=-self.prep[(shape, asymmetry)][1]/self.prep[(shape, asymmetry)][0])
+    #     result = np.asarray(result, dtype=np.float64)
+    #     return result
 
     def _gossetbar_asy_cline_equations(self):
         if self.data.test is None:
@@ -495,6 +549,7 @@ class _ProfilerSingleLocus:
             if self.model == "sigmoid":
                 if not os.path.isdir(f"{self.path}/sigmoid_C_evals"):
                     os.mkdir(f"{self.path}/sigmoid_C_evals")
+                    os.listdir(self.path)
                 f = open(
                     f"{self.path}/sigmoid_C_evals/sig_C_evals_{self.names_of_loci[self.locus_idx]}.csv",
                     "w",
@@ -737,6 +792,54 @@ class _ProfilerSingleLocus:
                 os.remove(
                     f"{self.path}/asy_bar_C_evals/asy_bar_C_evals_{self.names_of_loci[self.locus_idx]}.csv"
                 )
+            if self.model == "unit_hl":
+                if not os.path.isdir(f"{self.path}/unit_hl_C_evals"):
+                    os.mkdir(f"{self.path}/unit_hl_C_evals")
+                f = open(
+                    f"{self.path}/unit_hl_C_evals/unit_hl_C_evals_{self.names_of_loci[self.locus_idx]}.csv",
+                    "w",
+                )
+                with f:
+                    header = [
+                        "c-fibgridpos",
+                        "w-fibgridpos",
+                        "alpha-fibgridpos",
+                        "height-fibgridpos",
+                        "length-fibgridpos",
+                        "shape-fibgridpos",
+                        f"values",
+                    ]
+                    writer = csv.DictWriter(f, fieldnames=header, lineterminator='\n')
+                    writer.writeheader()
+                    for a in range(n_axes):
+                        for v_i in range(len(self.list_of_fibgrids[a].grid)):
+                            evals_i, best = self.fm.fibmax(
+                                function_to_max(self), fix_axis=(a, v_i)
+                            )
+                            evals.append(evals_i)
+                            for x in evals_i:
+                                writer.writerow(
+                                    {
+                                        "c-fibgridpos": x[0][0],
+                                        "w-fibgridpos": x[0][1],
+                                        "alpha-fibgridpos": x[0][2],
+                                        "height-fibgridpos": x[0][3],
+                                        "length-fibgridpos": x[0][4],
+                                        "shape-fibgridpos": x[0][5],
+                                        "values": x[1],
+                                    }
+                                )
+                f.close()
+                with zipfile.ZipFile(
+                    f"{self.path}/unit_hl_C_evals/unit_hl_C_evals_{self.names_of_loci[self.locus_idx]}.zip",
+                    "w",
+                ) as f:
+                    f.write(
+                        f"{self.path}/unit_hl_C_evals/unit_hl_C_evals_{self.names_of_loci[self.locus_idx]}.csv"
+                    )
+                os.remove(
+                    f"{self.path}/unit_hl_C_evals/unit_hl_C_evals_{self.names_of_loci[self.locus_idx]}.csv"
+                )
             return evals
         else:
             for a in range(n_axes):
@@ -763,6 +866,8 @@ class _ProfilerSingleLocus:
             function_to_max = _ProfilerSingleLocus._asy_cline_equation
         if self.model == "asymmetric_barrier":
             function_to_max = _ProfilerSingleLocus._asy_bar_cline_equation
+        if self.model == "unit_hl":
+            function_to_max = _ProfilerSingleLocus.unit_hl_cline_equations
 
         for a in range(n_axes):
             profiles.append(
@@ -845,37 +950,39 @@ class NonCentralStudent:
     @staticmethod
     def nctas243(x, v, a, prep1, prep2, accuracy=pow(10, -3)):
         if a == 0:
-            result = st.nct.cdf(x, v, nc=a, scale=prep1, loc=prep2)
-
+            result = st.t.cdf(x, v, scale=prep1, loc=prep2)
         else:
             xprep = (x - prep2) / prep1
             xprep = np.array(xprep)
             vf = np.vectorize(NonCentralStudent.helper_nct)
             result = vf(xprep, v, a, accuracy)
-        return result
+        return np.minimum(result, 0.999999999999)
 
-    @staticmethod
-    def nctas243_old(x, v, a, prep1, prep2, accuracy=pow(10, -3)):
-        result = []
-        if a == 0:
-            result.append(st.nct.cdf(x, v, nc=a, scale=prep1, loc=prep2))
-        else:
-            xprep = (x - prep2) / prep1
-            xprep = np.array(xprep)
-
-            for i in xprep:
-                if i >= 0:
-                    calculation = NonCentralStudent.nctas243_half(i, v, a, accuracy)
-                elif i < 0:
-                    calculation = (1 - NonCentralStudent.nctas243_half(i, v, (-a), accuracy))
-                result.append(calculation)
-        return result
+    # @staticmethod
+    # def nctas243_old(x, v, a, prep1, prep2, accuracy=pow(10, -3)):
+    #     result = []
+    #     if a == 0:
+    #         result.append(st.nct.cdf(x, v, nc=a, scale=prep1, loc=prep2))
+    #     else:
+    #         xprep = (x - prep2) / prep1
+    #         xprep = np.array(xprep)
+    #
+    #         for i in xprep:
+    #             if i >= 0:
+    #                 calculation = NonCentralStudent.nctas243_half(i, v, a, accuracy)
+    #             elif i < 0:
+    #                 calculation = (1 - NonCentralStudent.nctas243_half(i, v, (-a), accuracy))
+    #             result.append(calculation)
+    #     return result
 
     @staticmethod
     def nctas243_half(x, v, a, accuracy=pow(10, -3)):
         total_sum = 0
         converged = False
-        y = (pow(x, 2)/(pow(x, 2) + v))
+        if x == 0 and v == 0:
+            y = 1
+        else:
+            y = (pow(x, 2)/(pow(x, 2) + v))
         vo2 = v/2
         j = 0
         a1 = j + 1/2
